@@ -1,23 +1,22 @@
 /* Azbry Tap Runner – mobile-first
- * Menu Start • 9:16 letterbox • Tap/Keyboard • Overlay Game Over
+ * Mode Super Hard + Delta Time (kecepatan stabil lintas FPS / Situs Desktop)
  * by FebryWesker (Azbry-MD)
 */
 
 (() => {
-// ====== MODE SUPER HARD ======
-const GRAVITY       = 0.30;   // jatuh lebih cepat
-const JUMP_VELOCITY = -7.0;   // loncat susah dikontrol (sedikit lebih lemah)
-const PIPE_SPEED    = 5.0;    // pipa melaju jauh lebih cepat
-const GAP_HEIGHT    = 150;     // celah super sempit
-const PIPE_WIDTH    = 55;     // sedikit lebih tipis biar timing makin ketat
-const PIPE_SPACING  = 500;    // pipa makin rapat
-const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
-  
+  // ====== MODE SUPER HARD ======
+  const GRAVITY       = 0.30;   // px per frame@60 (diskalakan dg k)
+  const JUMP_VELOCITY = -7.0;   // px per frame@60 (diskalakan dg k saat update)
+  const PIPE_SPEED    = 5.0;    // px per frame@60
+  const GAP_HEIGHT    = 150;
+  const PIPE_WIDTH    = 55;
+  const PIPE_SPACING  = 500;
+  const REWARD_SCORE  = 50;
+
   // ====== KANVAS & SKALA 9:16 ======
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
 
-  // resolusi internal 9:16 (akan di-scale biar pas layar)
   const VW = 360, VH = 640;
   let scale = 1, offX = 0, offY = 0;
   function fit() {
@@ -33,7 +32,6 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
   fit();
   window.addEventListener('resize', fit);
 
-  // helper ubah koordinat layar → koordinat game
   function toGameCoord(x, y){
     return { x: (x - offX) / scale, y: (y - offY) / scale };
   }
@@ -61,8 +59,7 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
     r: 18
   };
 
-  // ====== UI OVERLAYS (dibuat oleh JS, tidak perlu ubah HTML) ======
-  // Info bar atas
+  // ====== UI OVERLAYS ======
   const bar = document.createElement('div');
   bar.style.cssText = `
     position:fixed; left:12px; right:12px; top:10px;
@@ -74,7 +71,6 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
   document.body.appendChild(bar);
   const hudScore = bar.querySelector('#hudScore');
 
-  // Menu Start
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
@@ -101,7 +97,6 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
 
-  // Overlay Game Over
   const over = document.createElement('div');
   over.style.cssText = `
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
@@ -117,7 +112,7 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
     <div id="overScore" style="color:#aeb6c2; font-weight:700; margin-bottom:10px">Score: 0 • Highscore: 0</div>
     <div style="color:#cfead1; background:rgba(184,255,154,.07); border:1px solid rgba(184,255,154,.25);
                 padding:10px; border-radius:12px; margin-bottom:14px">
-      Selesaikan <b>${REWARD_SCORE}</b> poin dan dapatkan reward <b>    ×1 Nasi Uduk Mama Alpi</b> 🍚
+      Selesaikan <b>${REWARD_SCORE}</b> poin dan dapatkan reward <b>×1 Nasi Uduk Mama Alpi</b> 🍚
     </div>
     <button id="btnRetry" style="
       background:linear-gradient(180deg,#b8ff9a,#8ee887); color:#0b0d10;
@@ -131,6 +126,7 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
   // ====== INPUT ======
   function jump() {
     if (state !== 'playing') return;
+    // vy di-update per frame dengan skala k, jadi set base speed-nya saja
     player.vy = JUMP_VELOCITY;
   }
   function startGame() {
@@ -144,7 +140,6 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
     overlay.style.display = 'none';
     over.style.display = 'none';
     state = 'playing';
-    // spawn awal
     lastSpawnX = 0;
   }
   function showMenu() {
@@ -160,7 +155,6 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
     over.style.display = 'flex';
   }
 
-  // pointer/touch area ke koordinat game agar hanya tap di area canvas yang dihitung
   function isInsideGame(x, y) {
     return x >= offX && x <= offX + VW*scale && y >= offY && y <= offY + VH*scale;
   }
@@ -168,7 +162,6 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
     if (!isInsideGame(e.clientX, e.clientY)) return;
     if (state === 'menu') startGame();
     else if (state === 'playing') jump();
-    else if (state === 'gameover') {/* tunggu tombol */}
   });
   document.getElementById('btnStart').addEventListener('click', startGame);
   document.getElementById('btnRetry').addEventListener('click', startGame);
@@ -188,41 +181,38 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
   // ====== LOGIKA ======
   function spawnPipeSet(xStart) {
     const gapY = rnd(140, VH - 140 - GAP_HEIGHT);
-    // atas
     pipes.push({ x: xStart, y: 0, w: PIPE_WIDTH, h: gapY, passed:false, type:'top' });
-    // bawah
     pipes.push({ x: xStart, y: gapY + GAP_HEIGHT, w: PIPE_WIDTH, h: VH - (gapY + GAP_HEIGHT), passed:false, type:'bottom' });
   }
 
-  function update(dt) {
+  // dtScale = k = dtMs / (1000/60) → 1.0 saat 60 FPS
+  function update(k) {
     if (state !== 'playing') return;
 
     // background scroll
-    bgX -= PIPE_SPEED * 0.35;
+    bgX -= PIPE_SPEED * 0.35 * k;
     if (bgX <= -VW) bgX += VW;
 
     // fisika player
-    player.vy += GRAVITY;
-    player.y  += player.vy;
+    player.vy += GRAVITY * k;
+    player.y  += player.vy * k;
 
     // clamp
     if (player.y < player.r) { player.y = player.r; player.vy = 0; }
-    if (player.y > VH - player.r) { // jatuh tanah
-      player.y = VH - player.r;
-      return showGameOver();
-    }
+    if (player.y > VH - player.r) { player.y = VH - player.r; return showGameOver(); }
 
     // pipes gerak & cek tabrakan
     for (let i = pipes.length - 1; i >= 0; i--) {
       const p = pipes[i];
-      p.x -= PIPE_SPEED;
-      // hit test sederhana (lingkaran vs AABB)
+      p.x -= PIPE_SPEED * k;
+
+      // hit test (circle vs AABB)
       const nearestX = Math.max(p.x, Math.min(player.x, p.x + p.w));
       const nearestY = Math.max(p.y, Math.min(player.y, p.y + p.h));
       const dx = player.x - nearestX, dy = player.y - nearestY;
       if (dx*dx + dy*dy < player.r*player.r) return showGameOver();
 
-      // score: saat melewati pipa bawah (agar 1 set = +1)
+      // score: saat melewati pipa bawah (1 set = +1)
       if (!p.passed && p.type === 'bottom' && (p.x + p.w) < player.x) {
         p.passed = true;
         score += 1;
@@ -232,8 +222,8 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
       if (p.x + p.w < -80) pipes.splice(i,1);
     }
 
-    // spawn baru berdasarkan jarak bergerak
-    lastSpawnX += PIPE_SPEED;
+    // spawn baru berdasarkan jarak yang “ditempuh”
+    lastSpawnX += PIPE_SPEED * k;
     if (lastSpawnX >= PIPE_SPACING) {
       lastSpawnX = 0;
       spawnPipeSet(VW + 40);
@@ -252,7 +242,6 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
   }
 
   function render() {
-    // clear layar & letterbox
     ctx.fillStyle = '#0b0d10';
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
@@ -260,12 +249,10 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
     ctx.translate(offX, offY);
     ctx.scale(scale, scale);
 
-    // panel bayangan seperti kartu (biar mirip screenshot)
     ctx.save();
     drawRoundedRect(0,0,VW,VH,18);
     ctx.clip();
 
-    // background bergulir (tile dua kali)
     if (assetsLoaded >= 2) {
       const bgW = VW, bgH = VH;
       const bx = Math.floor(bgX % bgW);
@@ -315,11 +302,17 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
     ctx.restore();
   }
 
-  // ====== LOOP ======
-  let last = 0;
-  function loop(t) {
-    const dt = Math.min(33, t - last); last = t;
-    if (state === 'playing') update(dt);
+  // ====== LOOP (delta time stabilized) ======
+  const TICK = 1000 / 60; // baseline 60fps
+  let last = performance.now();
+  function loop(now) {
+    let dt = now - last;
+    if (dt < 0) dt = 0;
+    if (dt > 100) dt = 100; // clamp biar stabil
+    last = now;
+
+    const k = dt / TICK; // skala gerak relatif ke 60fps (1.0 = 60fps)
+    if (state === 'playing') update(k);
     render();
     requestAnimationFrame(loop);
   }
@@ -327,7 +320,7 @@ const REWARD_SCORE  = 50;    // ambang reward lebih tinggi
 
   // tampilkan menu saat siap
   const readyChk = setInterval(() => {
-    if (assetsLoaded >= 1) { // cukup tunggu bird siap
+    if (assetsLoaded >= 1) { // cukup tunggu bird
       clearInterval(readyChk);
       showMenu();
     }
